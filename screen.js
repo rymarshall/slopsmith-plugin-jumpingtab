@@ -94,5 +94,76 @@
         AHEAD, BEHIND, HIT_LINE_FRAC,
     };
 
+    // ── WS state ──────────────────────────────────────────────
+    const state = {
+        filename: null,
+        tuning: null,
+        notes: [],
+        arcs: [],
+        ready: false,
+        ws: null,
+    };
+
+    function connect(filename, arrangementIdx) {
+        return new Promise((resolve, reject) => {
+            // Close any prior socket
+            if (state.ws) { try { state.ws.close(); } catch (e) {} state.ws = null; }
+            state.filename = filename;
+            state.tuning = null;
+            state.notes = [];
+            state.arcs = [];
+            state.ready = false;
+
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const qs = (arrangementIdx != null && arrangementIdx >= 0)
+                ? `?arrangement=${arrangementIdx}` : '';
+            const url = `${proto}//${location.host}/ws/highway/${encodeURIComponent(filename)}${qs}`;
+            const ws = new WebSocket(url);
+            state.ws = ws;
+
+            let total = null;
+
+            ws.onmessage = (ev) => {
+                let msg;
+                try { msg = JSON.parse(ev.data); } catch (e) { return; }
+                if (msg.error) { reject(new Error(msg.error)); ws.close(); return; }
+                if (msg.type === 'song_info') {
+                    state.tuning = msg.tuning || [0,0,0,0,0,0];
+                } else if (msg.type === 'notes') {
+                    total = msg.total;
+                    for (const n of msg.data) state.notes.push(n);
+                    if (state.notes.length >= total) {
+                        state.notes.sort((a, b) => a.t - b.t);
+                        state.arcs = buildTrajectories(state.notes);
+                        state.ready = true;
+                        resolve(state);
+                        // Leave socket open for beat/lyric messages that may trail;
+                        // close it on teardown or next playSong.
+                    }
+                }
+            };
+            ws.onerror = () => reject(new Error('ws error'));
+            ws.onclose = () => { if (!state.ready) reject(new Error('ws closed before ready')); };
+        });
+    }
+
+    // Expose for manual poking / future tests
+    window.__jumpingtab_state = state;
+    window.__jumpingtab_connect = connect;
+
+    // ── Hook installation ────────────────────────────────────
+    const _origPlay = window.playSong;
+    window.playSong = async function (filename, arrangement) {
+        await _origPlay(filename, arrangement);
+        try {
+            await connect(filename, arrangement);
+            console.log('[jumpingtab] loaded',
+                state.notes.length, 'notes,', state.arcs.length, 'arcs,',
+                'tuning', state.tuning);
+        } catch (e) {
+            console.warn('[jumpingtab] connect failed:', e.message);
+        }
+    };
+
     console.log('[jumpingtab] plugin loaded');
 })();
