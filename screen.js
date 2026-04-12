@@ -54,12 +54,16 @@
         // A "group" with size > 1 is a chord and breaks arc continuity.
         if (notes.length < 2) return [];
 
+        // Server rounds note times to 3 decimal places (ms precision), so
+        // chord notes arrive with byte-identical floats. Use a small epsilon
+        // anyway so any rounding drift upstream still groups them.
+        const EPS = 1e-4;
         const groups = [];
         let i = 0;
         while (i < notes.length) {
             const t = notes[i].t;
             let j = i;
-            while (j < notes.length && notes[j].t === t) j++;
+            while (j < notes.length && notes[j].t - t < EPS) j++;
             groups.push({ t, notes: notes.slice(i, j) });
             i = j;
         }
