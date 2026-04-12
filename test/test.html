@@ -115,6 +115,16 @@ check(g4, 'empty array → 0 arcs', core.buildTrajectories([]).length === 0);
 check(g4, 'single note → 0 arcs',
   core.buildTrajectories([{ t: 1, s: 2, f: 5 }]).length === 0);
 
+// epsilon grouping — notes 1μs apart should still group as a chord
+arcs = core.buildTrajectories([
+  { t: 0.0, s: 0, f: 3 },
+  { t: 0.5, s: 2, f: 5 },
+  { t: 0.500001, s: 3, f: 5 },  // drifted by 1μs
+  { t: 1.0, s: 1, f: 7 },
+]);
+check(g4, 'chord with 1μs drift still groups (2 arcs, not 3)',
+  arcs.length === 2, 'got ' + arcs.length);
+
 // ── bezierPoint ──────────────────────────────────────────
 const g5 = group('bezierPoint');
 // quadratic bezier from (0,0) via control (50, -20) to (100, 0)

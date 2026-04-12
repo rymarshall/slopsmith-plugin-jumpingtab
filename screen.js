@@ -63,7 +63,7 @@
         while (i < notes.length) {
             const t = notes[i].t;
             let j = i;
-            while (j < notes.length && notes[j].t - t < EPS) j++;
+            while (j < notes.length && Math.abs(notes[j].t - t) < EPS) j++;
             groups.push({ t, notes: notes.slice(i, j) });
             i = j;
         }
