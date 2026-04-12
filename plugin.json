@@ -1,0 +1,6 @@
+{
+  "id": "jumpingtab",
+  "name": "Jumping Tab",
+  "version": "0.1.0",
+  "script": "screen.js"
+}
