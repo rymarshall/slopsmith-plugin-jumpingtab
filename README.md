@@ -1,6 +1,33 @@
 # Jumping Tab
 
-A slopsmith plugin that adds a Yousician-style 2D horizontal tab view to the player. Notes flow right-to-left toward a glowing hit line, trajectory arcs connect consecutive monophonic notes, and a glowing ball visibly hops along those arcs and squashes when it crosses the hit line.
+A [slopsmith](https://github.com/byrongamatos/slopsmith) plugin that adds a Yousician-style 2D horizontal tab view to the player. Notes flow right-to-left toward a glowing hit line, trajectory arcs connect consecutive monophonic notes, and a glowing ball visibly hops along those arcs.
+
+![Main tab view](screenshots/overview.png)
+
+## Features
+
+- **2D horizontal tab** — notes scroll right→left on color-coded string lines, player view (low E on top).
+- **Trajectory arcs** — dashed cyan curves connect every consecutive note group (chords included) so you can see the melodic contour.
+- **Hopping ball** — a glowing ball traces the melody and squashes when it crosses the hit line.
+- **Technique rendering** — hammer-ons, pull-offs, and slides are drawn as fused capsules with labeled arcs above them; bends get amber arrows with conventional labels (`½`, `full`, `1½`, `2`).
+- **Section bands** — the current song section (intro / verse / chorus / solo / outro) is highlighted behind the notes and shown in a badge in the header.
+- **Beat & measure ticks** under the notes so you can feel the rhythm grid.
+- **Density-aware sizing** — notes shrink automatically in fast passages so adjacent fret circles never overlap, with a visual gutter between them.
+- **Progress bar** along the bottom with `mm:ss` timestamps.
+- **Auto-detected guitar vs. bass** — 6-string with the full palette, or 4-string layout with a bass-specific subset.
+- **Respects arrangement switching** — swapping Lead / Rhythm / Bass in the slopsmith player dropdown rebuilds the tab data live.
+
+### Techniques showcase
+
+![Hammer-ons, pull-offs, bends, and a chord landing](screenshots/techniques.png)
+
+The capsule shape on the left is a hammer-on pair (`5`→`7`), the pill after it is a pull-off. Amber arrows with labels show the bend size on each bent note. The chord on the right is rendered as a vertical stack of fret circles, and the preceding trajectory arc lands at the chord's centroid.
+
+### Fast passages
+
+![Dense sixteenth-note run](screenshots/fast.png)
+
+At 120 BPM sixteenth notes, the per-note radius clamps to half the same-string neighbor gap so every circle stays distinct instead of blurring into one blob.
 
 ## Install
 
@@ -8,7 +35,7 @@ Clone into your slopsmith `plugins/` directory and restart the web service:
 
 ```bash
 cd /path/to/slopsmith/plugins
-git clone <this-repo> jumpingtab
+git clone https://github.com/renanboni/slopsmith-plugin-jumpingtab.git jumpingtab
 cd ..
 docker compose restart web
 ```
@@ -23,18 +50,9 @@ Hard-reload the browser. A **Jumping Tab** button will appear in the player cont
 4. Press play. Watch the ball hop.
 5. Click the button again to return to the standard highway.
 
-## What it supports
-
-- 6-string guitar and 4-string bass arrangements (auto-detected from tuning length).
-- Respects whichever arrangement is currently selected in slopsmith's player.
-- Smooth sync to slopsmith's audio playback time.
-- Sustain notes drawn as tails.
-- Past notes fade out ~0.4 seconds after crossing the hit line.
-
 ## What it doesn't do (yet)
 
 - No chord name labels.
-- No technique glyphs (bend / slide / hammer-on / pull-off visuals — the notes still render, just as plain circles).
 - No chord-shape diagrams.
 - No microphone input or scoring.
 - No settings panel for speed / colors / visibility window.
@@ -42,12 +60,32 @@ Hard-reload the browser. A **Jumping Tab** button will appear in the player cont
 
 ## Tests
 
-`plugins/jumpingtab/test/test.html` is a standalone browser test harness for the pure helpers (layout math, binary search, trajectory builder, bezier). Open the file directly in a browser:
+`test/test.html` is a zero-dependency browser test harness for the pure helpers (layout math, binary search, trajectory builder, bezier). Open the file directly:
 
 ```
-file:///<path-to>/slopsmith/plugins/jumpingtab/test/test.html
+file:///path/to/jumpingtab/test/test.html
 ```
 
-All assertions should report green; the page title shows `N pass / 0 fail`.
+The page title shows `N pass / 0 fail`. Rendering, animation, and plugin integration are verified manually.
 
-Rendering, animation, and plugin integration are verified manually — there is no automated harness for those.
+## Demo harness
+
+`demo/index.html` is a standalone page that loads `screen.js` with synthetic data and renders a static frame — no slopsmith instance required. It was used to generate the screenshots in this README. Switch scenes with a query string:
+
+```
+file:///path/to/jumpingtab/demo/index.html?scene=overview
+file:///path/to/jumpingtab/demo/index.html?scene=techniques
+file:///path/to/jumpingtab/demo/index.html?scene=fast
+```
+
+To regenerate the screenshots yourself:
+
+```bash
+CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+for scene in overview techniques fast; do
+  "$CHROME" --headless=new --disable-gpu --hide-scrollbars \
+    --window-size=1344,484 \
+    --screenshot="screenshots/${scene}.png" \
+    "file://$(pwd)/demo/index.html?scene=${scene}"
+done
+```

@@ -1141,6 +1141,50 @@
     window.__jumpingtab_state = state;
     window.__jumpingtab_connect = connect;
 
+    // Debug / demo-harness hook. Lets a standalone HTML page bind a
+    // canvas, set synthetic state, and invoke drawFrame directly —
+    // used by demo/ to generate screenshots without running slopsmith.
+    window.__jumpingtab_demo = {
+        setCanvas(cnv) {
+            canvas = cnv;
+            ctx = cnv.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const rect = cnv.getBoundingClientRect();
+            cnv.width = Math.max(1, Math.floor(rect.width * dpr));
+            cnv.height = Math.max(1, Math.floor(rect.height * dpr));
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        },
+        setState(patch) { Object.assign(state, patch); },
+        // Mirror the work that connect()'s finalize step does on real data
+        // so demo states can be flat note arrays without precomputing.
+        finalizeState() {
+            state.notes.sort((a, b) => a.t - b.t);
+            const lastIdxByString = new Map();
+            const EPS_T = 1e-4;
+            for (let i = 0; i < state.notes.length; i++) {
+                const n = state.notes[i];
+                n._gapL = Infinity;
+                n._gapR = Infinity;
+                const prevIdx = lastIdxByString.get(n.s);
+                if (prevIdx != null) {
+                    const prev = state.notes[prevIdx];
+                    const gap = n.t - prev.t;
+                    if (gap > EPS_T) {
+                        n._gapL = gap;
+                        if (gap < prev._gapR) prev._gapR = gap;
+                    }
+                }
+                lastIdxByString.set(n.s, i);
+            }
+            state.arcs = buildTrajectories(state.notes);
+            const tech = buildTechniqueArcs(state.notes);
+            state.techArcs = tech.arcs;
+            state.techPaired = tech.paired;
+            state.ready = true;
+        },
+        drawFrame,
+    };
+
     // ── Hook installation ────────────────────────────────────
     const _origPlay = window.playSong;
     window.playSong = async function (filename, arrangement) {
