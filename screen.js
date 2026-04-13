@@ -277,6 +277,43 @@
         }
     }
 
+    function arcControlPoint(x0, y0, x1, y1) {
+        const midX = (x0 + x1) / 2;
+        const dy = Math.abs(y1 - y0);
+        const rise = Math.min(70, 20 + dy * 1.2);
+        const midY = Math.min(y0, y1) - rise;
+        return { cx: midX, cy: midY };
+    }
+
+    function drawArcs(W, H, nStrings, colors, now) {
+        if (!state.ready || !state.arcs.length) return;
+        const lo = now - BEHIND;
+        const hi = now + AHEAD;
+
+        ctx.save();
+        ctx.strokeStyle = '#6ee7ff';
+        ctx.globalAlpha = 0.55;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+
+        for (const arc of state.arcs) {
+            if (arc.t1 < lo || arc.t0 > hi) continue;
+            if (arc.s0 < 0 || arc.s0 >= nStrings) continue;
+            if (arc.s1 < 0 || arc.s1 >= nStrings) continue;
+            const x0 = timeX(arc.t0, now, W);
+            const y0 = stringY(arc.s0, H, nStrings);
+            const x1 = timeX(arc.t1, now, W);
+            const y1 = stringY(arc.s1, H, nStrings);
+            const { cx, cy } = arcControlPoint(x0, y0, x1, y1);
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.quadraticCurveTo(cx, cy, x1, y1);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
     function drawNotes(W, H, nStrings, colors, now) {
         if (!state.ready || !state.notes.length) return;
         const { start, end } = binaryVisibleRange(state.notes, now);
@@ -320,6 +357,7 @@
 
         drawBackground(W, H, nStrings, colors);
         drawSustains(W, H, nStrings, colors, now);
+        drawArcs(W, H, nStrings, colors, now);
         drawNotes(W, H, nStrings, colors, now);
     }
 
