@@ -466,6 +466,8 @@
         b.className = 'px-3 py-1.5 bg-dark-600 hover:bg-dark-500 rounded-lg text-xs text-gray-400 transition';
         b.textContent = 'Jumping Tab';
         b.title = 'Toggle Yousician-style jumping tab view';
+        b.disabled = true;
+        b.style.opacity = '0.5';
         b.onclick = toggle;
         c.insertBefore(b, last);
     }
@@ -477,23 +479,39 @@
     // ── Hook installation ────────────────────────────────────
     const _origPlay = window.playSong;
     window.playSong = async function (filename, arrangement) {
+        // Tear down any currently-active view before switching songs
+        if (active) {
+            active = false;
+            if (raf) { cancelAnimationFrame(raf); raf = null; }
+            unmountCanvas();
+            const b = document.getElementById('btn-jt');
+            if (b) b.className = 'px-3 py-1.5 bg-dark-600 hover:bg-dark-500 rounded-lg text-xs text-gray-400 transition';
+        }
+
         await _origPlay(filename, arrangement);
         injectBtn();
+        const btn = document.getElementById('btn-jt');
+        if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.title = 'Loading…'; }
+
         try {
             await connect(filename, arrangement);
             console.log('[jumpingtab] loaded',
-                state.notes.length, 'notes,', state.arcs.length, 'arcs,',
-                'tuning', state.tuning);
+                state.notes.length, 'notes,', state.arcs.length, 'arcs');
+            if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.title = 'Toggle Yousician-style jumping tab view'; }
         } catch (e) {
             console.warn('[jumpingtab] connect failed:', e.message);
+            if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.title = 'Jumping Tab unavailable: ' + e.message; }
         }
     };
 
     const _origShow = window.showScreen;
     window.showScreen = function (id) {
-        if (id !== 'player' && active) {
-            active = false;
-            unmountCanvas();
+        if (id !== 'player') {
+            if (active) {
+                active = false;
+                unmountCanvas();
+            }
+            if (state.ws) { try { state.ws.close(); } catch (e) {} state.ws = null; }
         }
         if (typeof _origShow === 'function') _origShow(id);
     };
