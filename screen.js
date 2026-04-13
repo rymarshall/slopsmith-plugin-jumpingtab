@@ -7,6 +7,7 @@
     const HIT_LINE_FRAC = 0.18;
     const FADE_SECONDS = 1.0;
     const SQUASH_WINDOW_MS = 60;
+    const IMPACT_DURATION = 0.45;   // seconds — ring expansion after a note crosses the hit line
     const TOP_PAD = 60;           // room for header strip
     const BOTTOM_PAD = 36;        // room for progress bar
     const HIT_ZONE_WIDTH = 56;    // wide glowing strip around hit line
@@ -934,6 +935,76 @@
         ctx.restore();
     }
 
+    // Impact rings — when a note crosses the hit line, fire a ring that
+    // stays anchored at (hitX, string y) and expands outward while fading,
+    // colored to match the string. Gives the "I hit that one" feedback.
+    // Also draws a brief full-string flash line so the impact feels like
+    // it energises the string.
+    function drawImpacts(W, H, nStrings, colors, now) {
+        if (!state.ready || !state.notes.length) return;
+        const { start, end } = binaryVisibleRange(state.notes, now);
+        const hitX = W * HIT_LINE_FRAC;
+
+        for (let i = start; i < end; i++) {
+            const n = state.notes[i];
+            if (n.s < 0 || n.s >= nStrings) continue;
+            const dt = now - n.t;
+            if (dt < 0 || dt >= IMPACT_DURATION) continue;
+
+            // Ease-out curve: starts fast, slows down. Good for impacts.
+            const p = dt / IMPACT_DURATION;
+            const ease = 1 - Math.pow(1 - p, 2);
+            const y = yFor(n.s, H, nStrings);
+            const color = colors[n.s];
+
+            // Expanding ring: grows from noteR out to ~3.2x, alpha fades
+            const baseR = 14;
+            const r = baseR * (1 + ease * 2.2);
+            const alpha = (1 - p) * 0.85;
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3 - ease * 2;  // thick → thin
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 18;
+            ctx.beginPath();
+            ctx.arc(hitX, y, r, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Secondary inner ring in white for extra pop on fresh hits
+            if (p < 0.5) {
+                ctx.globalAlpha = (1 - p * 2) * 0.6;
+                ctx.strokeStyle = '#ffffff';
+                ctx.shadowBlur = 10;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(hitX, y, baseR * (1 + ease * 1.2), 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Horizontal string flash — a bright streak along the string
+            // for ~120ms, like plucking the string.
+            if (p < 0.3) {
+                const flashAlpha = (1 - p / 0.3) * 0.7;
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = flashAlpha;
+                const flashGrad = ctx.createLinearGradient(hitX - 80, 0, hitX + 80, 0);
+                flashGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+                flashGrad.addColorStop(0.5, color);
+                flashGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.strokeStyle = flashGrad;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(hitX - 80, y);
+                ctx.lineTo(hitX + 80, y);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+    }
+
     // Bend indicators — a bright vertical arrow above any note with bn > 0,
     // labeled with the bend amount in standard tab notation. Rendered on
     // top of notes (both normal fret circles and fused capsules) so it's
@@ -1082,11 +1153,14 @@
 
         drawBackground(W, H, nStrings, colors, now);
         drawSustains(W, H, nStrings, colors, now);
-        drawArcs(W, H, nStrings, colors, now);
+        // drawArcs (dashed trajectory curves) intentionally omitted — the
+        // ball still hops along the underlying state.arcs data, we just
+        // don't visualize the path.
         drawTechniquePairs(W, H, nStrings, colors, now);
         drawTechniqueArcs(W, H, nStrings, colors, now);
         drawNotes(W, H, nStrings, colors, now);
         drawBends(W, H, nStrings, colors, now);
+        drawImpacts(W, H, nStrings, colors, now);
         drawBall(W, H, nStrings, colors, now);
         drawEdgeFade(W, H);
         drawHeader(W, H, now);
