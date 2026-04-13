@@ -2,7 +2,7 @@
     'use strict';
 
     // ── Constants ─────────────────────────────────────────────
-    const AHEAD = 2.8;
+    const AHEAD = 4.5;       // seconds of future notes visible at once
     const BEHIND = 0.4;
     const HIT_LINE_FRAC = 0.15;
     const FADE_SECONDS = 0.4;
@@ -163,9 +163,18 @@
     // ── Canvas lifecycle ─────────────────────────────────────
     let active = false;
     let canvas = null;
+    let wrap = null;
     let ctx = null;
     let raf = null;
     let audioEl = null;
+
+    // Player-view Y mapping: low E (highest string index) at top, high e
+    // (index 0) at bottom — matches what you see when looking down at your
+    // own guitar. Keeps stringY pure (tests untouched) and just inverts
+    // the index at the call site.
+    function yFor(s, H, nStrings) {
+        return stringY(nStrings - 1 - s, H, nStrings);
+    }
 
     // Size the backing store to the canvas's on-screen CSS pixels, respecting
     // device pixel ratio so the result is crisp on retina. Called on mount
@@ -189,21 +198,36 @@
         const player = document.getElementById('player');
         const hw = document.getElementById('highway');
         if (!player || !hw) return false;
+
+        // Wrapper takes the highway's flex slot and centers the canvas
+        // vertically + horizontally inside it. The canvas itself is a
+        // shorter horizontal strip (Yousician style) instead of filling
+        // the whole player area.
+        wrap = document.createElement('div');
+        wrap.id = 'jumpingtab-wrap';
+        wrap.style.cssText = [
+            'flex:1',
+            'min-height:0',
+            'display:flex',
+            'align-items:center',
+            'justify-content:center',
+            'padding:0 24px',
+        ].join(';');
+
         canvas = document.createElement('canvas');
         canvas.id = 'jumpingtab-canvas';
-        // Insert the canvas as a flex sibling right after #highway, so it
-        // gets the same flex slot as #highway (above #player-controls, below
-        // #player-hud). Using flex: 1 + min-height: 0 mirrors #highway's
-        // own rules in static/style.css, so the layout engine does the
-        // sizing for us — no overlap with the controls or HUD.
         canvas.style.cssText = [
-            'flex:1',
             'width:100%',
-            'min-height:0',
+            'max-width:1400px',
+            'height:min(42vh, 360px)',
             'display:block',
             'background:#0f1420',
+            'border-radius:10px',
+            'box-shadow:0 8px 24px rgba(0,0,0,0.4)',
         ].join(';');
-        hw.insertAdjacentElement('afterend', canvas);
+
+        wrap.appendChild(canvas);
+        hw.insertAdjacentElement('afterend', wrap);
         ctx = canvas.getContext('2d');
         hw.style.display = 'none';
         audioEl = document.querySelector('audio');
@@ -215,7 +239,7 @@
     function unmountCanvas() {
         if (raf) { cancelAnimationFrame(raf); raf = null; }
         window.removeEventListener('resize', sizeCanvasToBox);
-        if (canvas) { canvas.remove(); canvas = null; ctx = null; }
+        if (wrap) { wrap.remove(); wrap = null; canvas = null; ctx = null; }
         const hw = document.getElementById('highway');
         if (hw) hw.style.display = '';
         audioEl = null;
@@ -229,7 +253,7 @@
         ctx.strokeStyle = '#3a4358';
         ctx.lineWidth = 1;
         for (let s = 0; s < nStrings; s++) {
-            const y = stringY(s, H, nStrings);
+            const y = yFor(s, H, nStrings);
             ctx.beginPath();
             ctx.moveTo(0, y);
             ctx.lineTo(W, y);
@@ -242,7 +266,7 @@
         const labels = nStrings === 4 ? ['G','D','A','E'] : ['e','B','G','D','A','E'];
         for (let s = 0; s < nStrings; s++) {
             ctx.fillStyle = colors[s];
-            ctx.fillText(labels[s], 6, stringY(s, H, nStrings));
+            ctx.fillText(labels[s], 6, yFor(s, H, nStrings));
         }
 
         const hitX = W * HIT_LINE_FRAC;
@@ -268,7 +292,7 @@
             if (n.s < 0 || n.s >= nStrings) continue;
             const x0 = timeX(n.t, now, W);
             const x1 = timeX(n.t + n.sus, now, W);
-            const y = stringY(n.s, H, nStrings);
+            const y = yFor(n.s, H, nStrings);
             ctx.save();
             ctx.globalAlpha = 0.55;
             ctx.fillStyle = colors[n.s];
@@ -312,9 +336,9 @@
             if (arc.s0 < 0 || arc.s0 >= nStrings) continue;
             if (arc.s1 < 0 || arc.s1 >= nStrings) continue;
             const x0 = timeX(arc.t0, now, W);
-            const y0 = stringY(arc.s0, H, nStrings);
+            const y0 = yFor(arc.s0, H, nStrings);
             const x1 = timeX(arc.t1, now, W);
-            const y1 = stringY(arc.s1, H, nStrings);
+            const y1 = yFor(arc.s1, H, nStrings);
             const { cx, cy } = arcControlPoint(x0, y0, x1, y1);
             ctx.beginPath();
             ctx.moveTo(x0, y0);
@@ -356,9 +380,9 @@
         if (!arc) return;
 
         const x0 = timeX(arc.t0, now, W);
-        const y0 = stringY(arc.s0, H, nStrings);
+        const y0 = yFor(arc.s0, H, nStrings);
         const x1 = timeX(arc.t1, now, W);
-        const y1 = stringY(arc.s1, H, nStrings);
+        const y1 = yFor(arc.s1, H, nStrings);
         const { cx, cy } = arcControlPoint(x0, y0, x1, y1);
 
         const u = Math.max(0, Math.min(1, (now - arc.t0) / Math.max(0.0001, arc.t1 - arc.t0)));
@@ -401,7 +425,7 @@
             const n = state.notes[i];
             if (n.s < 0 || n.s >= nStrings) continue;
             const x = timeX(n.t, now, W);
-            const y = stringY(n.s, H, nStrings);
+            const y = yFor(n.s, H, nStrings);
             const color = colors[n.s];
 
             // Past-note fade: once x < hitX, fade over FADE_SECONDS of real time
