@@ -326,6 +326,19 @@
         return best;
     }
 
+    function nearestNoteAtHit(notes, now, hitX, W) {
+        // Find the note whose current x is closest to the hit line.
+        const { start, end } = binaryVisibleRange(notes, now);
+        let best = null, bestDx = Infinity;
+        for (let i = start; i < end; i++) {
+            const n = notes[i];
+            const x = timeX(n.t, now, W);
+            const dx = Math.abs(x - hitX);
+            if (dx < bestDx) { bestDx = dx; best = { note: n, dx, x }; }
+        }
+        return best;
+    }
+
     function drawBall(W, H, nStrings, colors, now) {
         if (!state.ready || !state.arcs.length) return;
         const arc = findActiveArc(state.arcs, now);
@@ -340,12 +353,27 @@
         const u = Math.max(0, Math.min(1, (now - arc.t0) / Math.max(0.0001, arc.t1 - arc.t0)));
         const p = bezierPoint(x0, y0, cx, cy, x1, y1, u);
 
+        // Squash when we're inside SQUASH_WINDOW_MS of any note crossing the hit line
+        const hitX = W * HIT_LINE_FRAC;
+        const nearest = nearestNoteAtHit(state.notes, now, hitX, W);
+        let sx = 1, sy = 1;
+        if (nearest && nearest.dx < 14) {
+            const msFromNote = Math.abs(now - nearest.note.t) * 1000;
+            if (msFromNote < SQUASH_WINDOW_MS) {
+                const k = 1 - (msFromNote / SQUASH_WINDOW_MS);  // 1 at t=note, 0 at edge
+                sx = 1 + 0.25 * k;
+                sy = 1 - 0.40 * k;
+            }
+        }
+
         ctx.save();
         ctx.fillStyle = '#ffffff';
         ctx.shadowColor = '#6ee7ff';
         ctx.shadowBlur = 14;
+        ctx.translate(p.x, p.y);
+        ctx.scale(sx, sy);
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     }
