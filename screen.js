@@ -313,6 +313,28 @@
     let raf = null;
     let audioEl = null;
 
+    // ── Zoom ─────────────────────────────────────────────────
+    const ZOOM_MIN = 0.4;
+    const ZOOM_MAX = 3.0;
+    const ZOOM_STEP = 0.1;
+    let zoomLevel = 1.0;
+    const ZOOM_BASE_PX = 360; // matches the max in the original height expression
+
+    function applyZoom() {
+        if (!canvas) return;
+        const h = Math.round(ZOOM_BASE_PX * zoomLevel);
+        canvas.style.height = h + 'px';
+        sizeCanvasToBox();
+    }
+
+    function onWheelZoom(e) {
+        if (!canvas) return;
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+        zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomLevel + delta));
+        applyZoom();
+    }
+
     // Player-view Y mapping: low E (highest string index) at top, high e
     // (index 0) at bottom — matches what you see when looking down at your
     // own guitar. Keeps stringY pure (tests untouched) and just inverts
@@ -378,12 +400,14 @@
         audioEl = document.querySelector('audio');
         sizeCanvasToBox();
         window.addEventListener('resize', sizeCanvasToBox);
+        canvas.addEventListener('wheel', onWheelZoom, { passive: false });
         return true;
     }
 
     function unmountCanvas() {
         if (raf) { cancelAnimationFrame(raf); raf = null; }
         window.removeEventListener('resize', sizeCanvasToBox);
+        if (canvas) canvas.removeEventListener('wheel', onWheelZoom);
         if (wrap) { wrap.remove(); wrap = null; canvas = null; ctx = null; }
         const hw = document.getElementById('highway');
         if (hw) hw.style.display = '';
